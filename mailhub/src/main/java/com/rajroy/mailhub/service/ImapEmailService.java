@@ -10,6 +10,8 @@ import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.Session;
 import jakarta.mail.Store;
+import jakarta.mail.UIDFolder;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -85,10 +87,9 @@ public class ImapEmailService {
       StringBuilder result = new StringBuilder();
       for (int i = 0; i < multipart.getCount(); i++) {
         BodyPart bodyPart = multipart.getBodyPart(i);
-        String text = getTextFromMessage(bodyPart); // 🔁 recursion for nested multiparts
+        String text = getTextFromMessage(bodyPart);
         if (text != null && !text.isEmpty()) {
           if (bodyPart.isMimeType("text/html")) {
-            // Prefer HTML version
             return text;
           } else {
             result.append(text);
@@ -106,19 +107,22 @@ public class ImapEmailService {
     try {
       ensureConnected();
 
-      int totalMessages = inbox.getMessageCount();
-      int start = Math.max(1, totalMessages - count + 1);
-      Message[] messages = inbox.getMessages(start, totalMessages);
+      if (inbox instanceof UIDFolder uidFolder) {
 
-      for (Message message : messages) {
-        EmailDto dto = new EmailDto();
-        dto.setSubject(message.getSubject());
-        dto.setFrom(message.getFrom()[0].toString());
-        dto.setTo(Arrays.toString(message.getAllRecipients()));
-        dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
-        dto.setContentType(message.getContentType());
-        dto.setBodyHtml(getTextFromMessage(message));
-        emails.add(dto);
+        int totalMessages = inbox.getMessageCount();
+        int start = Math.max(1, totalMessages - count + 1);
+        Message[] messages = inbox.getMessages(start, totalMessages);
+
+        for (Message message : messages) {
+          EmailDto dto = new EmailDto();
+          dto.setUid(uidFolder.getUID(message));
+          dto.setSubject(message.getSubject());
+          dto.setFrom(message.getFrom()[0].toString());
+          dto.setTo(Arrays.toString(message.getAllRecipients()));
+          dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
+          dto.setContentType(message.getContentType());
+          emails.add(dto);
+        }
       }
 
     } catch (Exception e) {
@@ -126,5 +130,28 @@ public class ImapEmailService {
     }
 
     return emails;
+  }
+
+  public EmailDto getEmailByUid(long uid) {
+    try {
+      if (inbox instanceof UIDFolder uidFolder) {
+        Message message = uidFolder.getMessageByUID(uid);
+        if (message != null) {
+          String bodyHtml = getTextFromMessage(message);
+          EmailDto dto = new EmailDto();
+          dto.setUid(uidFolder.getUID(message));
+          dto.setSubject(message.getSubject());
+          dto.setFrom(message.getFrom()[0].toString());
+          dto.setTo(Arrays.toString(message.getAllRecipients()));
+          dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
+          dto.setContentType(message.getContentType());
+          dto.setBodyHtml(bodyHtml);
+          return dto;
+        }
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    return null;
   }
 }

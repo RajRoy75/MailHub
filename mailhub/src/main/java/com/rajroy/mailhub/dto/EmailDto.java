@@ -10,6 +10,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EmailDto {
+  private long uid;
   private String subject;
   private String from;
   private String to;
