@@ -1,8 +1,9 @@
 package com.rajroy.mailhub.service;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.mail.BodyPart;
+import jakarta.mail.FetchProfile;
+import jakarta.mail.Flags;
 import jakarta.mail.Folder;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
@@ -12,68 +13,165 @@ import jakarta.mail.Session;
 import jakarta.mail.Store;
 import jakarta.mail.UIDFolder;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.annotation.RequestScope;
 
 import com.rajroy.mailhub.dto.EmailDto;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@RequestScope
 public class ImapEmailService {
 
   private final Session mailSession;
+  private final Object connectionLock = new Object();
 
-  @Value("${imap.username}")
   private String username;
 
-  @Value("${imap.password}")
   private String password;
+
+  private Store store;
+  private final Map<String, Folder> openFolders = new ConcurrentHashMap<>();
 
   public ImapEmailService(Session mailSession) {
     this.mailSession = mailSession;
   }
 
-  private Store store;
-  private Folder inbox;
-
-  @PostConstruct
-  public void init() {
-    try {
-      store = mailSession.getStore("imaps");
-      store.connect(username, password);
-      inbox = store.getFolder("INBOX");
-      inbox.open(Folder.READ_ONLY);
-      System.out.println("✅ IMAP connection established successfully");
-    } catch (Exception e) {
-      System.err.println("❌ Failed to initialize IMAP connection: " + e.getMessage());
-      e.printStackTrace();
-    }
+  public void setCredentials(String username, String password) {
+    this.username = username;
+    this.password = password;
   }
 
   @PreDestroy
   public void cleanup() {
-    try {
-      if (inbox != null && inbox.isOpen())
-        inbox.close();
-      if (store != null && store.isConnected())
-        store.close();
-      System.out.println("🧹 IMAP connection closed");
-    } catch (Exception e) {
-      e.printStackTrace();
+    forceDisconnect();
+  }
+
+  private Folder getFolder(String folderName) throws MessagingException {
+    synchronized (connectionLock) {
+      if (store == null || !store.isConnected()) {
+        System.out.println("🔄 Connecting to IMAP Store...");
+        store = mailSession.getStore("imaps");
+        store.connect(username, password);
+      }
+
+      Folder folder = openFolders.get(folderName);
+      if (folder == null || !folder.isOpen()) {
+        System.out.println("📂 Opening folder: " + folderName);
+        folder = store.getFolder(folderName);
+        folder.open(Folder.READ_ONLY);
+        openFolders.put(folderName, folder);
+      }
+      return folder;
     }
   }
 
-  private void ensureConnected() throws MessagingException {
-    if (store == null || !store.isConnected()) {
-      System.out.println("🔄 Reconnecting IMAP store...");
-      store = mailSession.getStore("imaps");
-      store.connect(username, password);
-      inbox = store.getFolder("INBOX");
-      inbox.open(Folder.READ_ONLY);
-      System.out.println("IMAP Connected Again.......");
+  @FunctionalInterface
+  public interface EmailAction<T> {
+    T execute(Folder folder) throws Exception;
+  }
+
+  public <T> T executeInFolder(String folderName, EmailAction<T> action) {
+    synchronized (connectionLock) {
+      try {
+        Folder folder = getFolder(folderName);
+        return action.execute(folder);
+      } catch (Exception e) {
+        System.err.println("⚠️ IMAP Operation failed for " + folderName + ", retrying...");
+        forceDisconnect();
+        try {
+          Folder folder = getFolder(folderName);
+          return action.execute(folder);
+        } catch (Exception retryEx) {
+          throw new RuntimeException("Failed to execute email operation", retryEx);
+        }
+      }
+    }
+  }
+
+  public List<EmailDto> fetchEmails(String folderName, int count) {
+    return executeInFolder(folderName, (folder) -> {
+      List<EmailDto> emails = new ArrayList<>();
+
+      if (folder instanceof UIDFolder uidFolder) {
+        int totalMessages = folder.getMessageCount();
+        if (totalMessages == 0)
+          return emails;
+
+        int start = Math.max(1, totalMessages - count + 1);
+        Message[] messages = folder.getMessages(start, totalMessages);
+
+        FetchProfile fp = new FetchProfile();
+        fp.add(FetchProfile.Item.ENVELOPE);
+        fp.add(UIDFolder.FetchProfileItem.UID);
+        fp.add(FetchProfile.Item.FLAGS);
+        folder.fetch(messages, fp);
+
+        for (int i = messages.length - 1; i >= 0; i--) {
+          Message message = messages[i];
+          EmailDto dto = new EmailDto();
+          dto.setUid(uidFolder.getUID(message));
+          dto.setSubject(message.getSubject());
+          dto.setIsRead(message.isSet(Flags.Flag.SEEN));
+          if (message.getFrom() != null && message.getFrom().length > 0) {
+            dto.setFrom(message.getFrom()[0].toString());
+          }
+          dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
+          emails.add(dto);
+        }
+      }
+      return emails;
+    });
+  }
+
+  public EmailDto getEmailByUid(String folderName, long uid) {
+    return executeInFolder(folderName, (folder) -> {
+      if (folder instanceof UIDFolder uidFolder) {
+        Message message = uidFolder.getMessageByUID(uid);
+        if (message != null) {
+          String bodyHtml = getTextFromMessage(message);
+
+          EmailDto dto = new EmailDto();
+          dto.setUid(uidFolder.getUID(message));
+          dto.setSubject(message.getSubject());
+          if (message.getFrom() != null && message.getFrom().length > 0)
+            dto.setFrom(message.getFrom()[0].toString());
+          dto.setTo(Arrays.toString(message.getAllRecipients()));
+          dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
+          dto.setContentType(message.getContentType());
+          dto.setBodyHtml(bodyHtml);
+          return dto;
+        }
+      }
+      return null;
+    });
+  }
+
+  private void forceDisconnect() {
+    synchronized (connectionLock) {
+      try {
+        for (Folder f : openFolders.values()) {
+          if (f.isOpen())
+            f.close(false);
+        }
+        openFolders.clear();
+      } catch (Exception ignored) {
+      }
+
+      try {
+        if (store != null && store.isConnected()) {
+          store.close();
+        }
+      } catch (Exception ignored) {
+      }
+
+      store = null;
+      System.out.println("🧹 IMAP connection reset");
     }
   }
 
@@ -89,69 +187,13 @@ public class ImapEmailService {
         BodyPart bodyPart = multipart.getBodyPart(i);
         String text = getTextFromMessage(bodyPart);
         if (text != null && !text.isEmpty()) {
-          if (bodyPart.isMimeType("text/html")) {
+          if (bodyPart.isMimeType("text/html"))
             return text;
-          } else {
-            result.append(text);
-          }
+          result.append(text);
         }
       }
       return result.toString();
     }
     return "";
-  }
-
-  public List<EmailDto> readLatestEmails(int count) {
-    List<EmailDto> emails = new ArrayList<>();
-
-    try {
-      ensureConnected();
-
-      if (inbox instanceof UIDFolder uidFolder) {
-
-        int totalMessages = inbox.getMessageCount();
-        int start = Math.max(1, totalMessages - count + 1);
-        Message[] messages = inbox.getMessages(start, totalMessages);
-
-        for (Message message : messages) {
-          EmailDto dto = new EmailDto();
-          dto.setUid(uidFolder.getUID(message));
-          dto.setSubject(message.getSubject());
-          dto.setFrom(message.getFrom()[0].toString());
-          dto.setTo(Arrays.toString(message.getAllRecipients()));
-          dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
-          dto.setContentType(message.getContentType());
-          emails.add(dto);
-        }
-      }
-
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-
-    return emails;
-  }
-
-  public EmailDto getEmailByUid(long uid) {
-    try {
-      if (inbox instanceof UIDFolder uidFolder) {
-        Message message = uidFolder.getMessageByUID(uid);
-        if (message != null) {
-          String bodyHtml = getTextFromMessage(message);
-          EmailDto dto = new EmailDto();
-          dto.setUid(uidFolder.getUID(message));
-          dto.setSubject(message.getSubject());
-          dto.setFrom(message.getFrom()[0].toString());
-          dto.setTo(Arrays.toString(message.getAllRecipients()));
-          dto.setDate(message.getReceivedDate() != null ? message.getReceivedDate().toString() : "");
-          dto.setContentType(message.getContentType());
-          dto.setBodyHtml(bodyHtml);
-          return dto;
-        }
-      }
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-    return null;
   }
 }

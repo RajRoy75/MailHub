@@ -1,5 +1,6 @@
 package com.rajroy.mailhub.entity;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -23,9 +24,32 @@ public class User implements UserDetails {
   private long id;
   private String username;
 
-  @JoinColumn(unique = true, nullable = false)
+  @Column(unique = true, nullable = false)
   private String email;
   private String password;
+  private String profilePicture;
+
+  @Builder.Default
+  @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+  private List<ImapConfig> imapConfigs = new ArrayList<>();
+
+  @OneToMany(mappedBy = "user")
+  private List<Token> tokens;
+
+  public void addImapConfig(ImapConfig config) {
+    if (imapConfigs == null) {
+      imapConfigs = new ArrayList<>();
+    }
+    imapConfigs.add(config);
+    config.setUser(this);
+  }
+
+  public void removeImapConfig(ImapConfig config) {
+    if (imapConfigs != null) {
+      imapConfigs.remove(config);
+      config.setUser(null);
+    }
+  }
 
   @Override
   public Collection<? extends GrantedAuthority> getAuthorities() {

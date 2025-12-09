@@ -22,9 +22,13 @@ public class EmailConfiguration {
   @Primary
   public Properties imapProperties() {
     Properties props = new Properties();
-    props.put("mail.imap.connectiontimeout", "5000");
-    props.put("mail.imap.timeout", "5000");
-    props.put("mail.imap.writetimeout", "5000");
+    props.put("mail.imaps.connectiontimeout", "30000");
+    props.put("mail.imaps.timeout", "30000");
+    props.put("mail.imaps.writetimeout", "30000");
+    props.put("mail.imaps.ssl.enable", "true");
+    props.put("mail.debug", "true");
+    props.put("mail.imaps.auth.plain.disable", "false");
+    props.put("mail.imaps.auth.mechanisms", "PLAIN");
     props.setProperty("mail.store.protocol", "imaps");
     props.setProperty("mail.imaps.host", imapHost);
     props.setProperty("mail.imaps.port", imapPort);

@@ -17,4 +17,5 @@ public class EmailDto {
   private String date;
   private String contentType;
   private String bodyHtml;
+  private Boolean isRead;
 }
