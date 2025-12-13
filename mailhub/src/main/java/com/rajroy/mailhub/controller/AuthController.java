@@ -34,10 +34,10 @@ public class AuthController {
 
     ResponseCookie cookie = ResponseCookie.from("accessToken", loginResult.getJwt())
         .httpOnly(true)
-        .secure(false)
+        .secure(true)
         .path("/")
         .maxAge(7 * 24 * 60 * 60)
-        .sameSite("Lax")
+        .sameSite("None")
         .build();
 
     return ResponseEntity.ok()
