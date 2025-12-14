@@ -1,40 +1,14 @@
-
 "use client"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
-  closestCenter,
-  DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type UniqueIdentifier,
-} from "@dnd-kit/core"
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
-import {
-  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-  IconCircleCheckFilled,
   IconDotsVertical,
-  IconGripVertical,
   IconLayoutColumns,
-  IconLoader,
-  IconPlus,
-  IconTrendingUp,
+  IconSearch,
+  IconMailOpened
 } from "@tabler/icons-react"
 import {
   ColumnDef,
@@ -46,7 +20,6 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  Row,
   SortingState,
   useReactTable,
   VisibilityState,
@@ -65,15 +38,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableBody,
@@ -84,7 +48,6 @@ import {
 } from "@/components/ui/table"
 import {
   Tabs,
-  TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
@@ -93,123 +56,97 @@ export const schema = z.object({
   uid: z.number(),
   subject: z.string(),
   from: z.string(),
-  to: z.string(),
+  to: z.nullable(z.string()).optional(),
   date: z.string(),
+  isRead: z.boolean().optional().default(false),
 })
-
-
-// Create a separate component for the drag handle
-function DragHandle({ id }: { id: number }) {
-  const { attributes, listeners } = useSortable({
-    id,
-  })
-
-  return (
-    <Button
-      {...attributes}
-      {...listeners}
-      variant="ghost"
-      size="icon"
-      className="text-muted-foreground size-7 hover:bg-transparent"
-    >
-      <IconGripVertical className="text-muted-foreground size-3" />
-      <span className="sr-only">Drag to reorder</span>
-    </Button>
-  )
-}
-
-function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
-  const { transform, transition, setNodeRef, isDragging } = useSortable({
-    id: row.original.uid,
-  })
-
-  return (
-    <TableRow
-      data-state={row.getIsSelected() && "selected"}
-      data-dragging={isDragging}
-      ref={setNodeRef}
-      className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition: transition,
-      }}
-    >
-      {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id}>
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
-      ))}
-    </TableRow>
-  )
-}
 
 export function DataTable({
   data: initialData,
+  folder: url,
 }: {
-  data: z.infer<typeof schema>[]
+  data: z.infer<typeof schema>[],
+  folder: string,
 }) {
   const router = useRouter();
-  const [data, setData] = React.useState(() => initialData)
+
+  const [data, setData] = React.useState(() => initialData || [])
+  const [activeTab, setActiveTab] = React.useState("all")
+
+  React.useEffect(() => {
+    if (initialData) setData(initialData)
+  }, [initialData])
+
+  const filteredData = React.useMemo(() => {
+    if (activeTab === "unread") {
+      return data.filter((item) => !item.isRead);
+    }
+
+    if (activeTab === "flagged") {
+      return [];
+    }
+
+    return data;
+  }, [data, activeTab]);
+
+  const unreadCount = React.useMemo(() => {
+    return data.filter((item) => !item.isRead).length;
+  }, [data]);
+
   const [rowSelection, setRowSelection] = React.useState({})
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({})
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
-  )
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize: 10,
   })
-  const sortableId = React.useId()
-  const sensors = useSensors(
-    useSensor(MouseSensor, {}),
-    useSensor(TouchSensor, {}),
-    useSensor(KeyboardSensor, {})
-  )
 
   const columns: ColumnDef<z.infer<typeof schema>>[] = [
     {
-      id: "drag",
-      header: () => null,
-      cell: ({ row }) => <DragHandle id={row.original.uid} />,
-    },
-    {
       id: "select",
       header: ({ table }) => (
-        <div className="flex items-center justify-center">
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-            aria-label="Select all"
-          />
-        </div>
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+          className="border-zinc-700 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+        />
       ),
       cell: ({ row }) => (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center gap-3">
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
             aria-label="Select row"
+            className="border-zinc-700 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
           />
+          {!row.original.isRead && (
+            <div className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+          )}
         </div>
       ),
       enableSorting: false,
       enableHiding: false,
+      size: 40,
     },
     {
       accessorKey: "header",
-      header: "Header",
+      header: "Subject",
       cell: ({ row }) => {
+        const isUnread = !row.original.isRead;
         return (
           <div
-            className="cursor-pointer text-md font-bold"
-            onClick={() => router.push(`/email/${row.original.uid}`)}
+            className={`
+                cursor-pointer text-sm transition-colors truncate max-w-[300px] md:max-w-md
+                ${isUnread ? "font-bold text-white" : "font-normal text-zinc-400"}
+            `}
+            onClick={() => router.push(`/email/${row.original.uid}?folder=${url}`)}
           >
-            {row.original.subject}
+            {row.original.subject || "(No Subject)"}
           </div>
         )
       },
@@ -219,102 +156,44 @@ export function DataTable({
       accessorKey: "sender",
       header: "Sender",
       cell: ({ row }) => {
-        const from = row.original.from;
+        const from = row.original.from || "Unknown";
         const name = from.includes("<") ? from.split("<")[0].trim() : from;
+        const isUnread = !row.original.isRead;
+
+        const colors = ["bg-red-500", "bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500", "bg-pink-500"];
+        const color = colors[name.length % colors.length];
 
         return (
-          <div className="w-32">
-            <Badge variant="outline" className="text-muted-foreground px-1.5">
+          <div className="flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${color} ${isUnread ? 'opacity-100' : 'opacity-50'}`} />
+            <span className={`text-sm truncate max-w-[120px] ${isUnread ? "font-medium text-zinc-200" : "font-normal text-zinc-500"}`}>
               {name}
-            </Badge>
+            </span>
           </div>
         );
       },
     },
     {
       accessorKey: "time",
-      header: "Time",
+      header: "Date",
       cell: ({ row }) => {
-        const dateStr: string = row.original.date;
+        const dateStr = row.original.date;
+        const isUnread = !row.original.isRead;
 
         const parseDateFlexible = (s: string): Date => {
           let d = new Date(s);
           if (!isNaN(d.getTime())) return d;
-
-          const tzMap: Record<string, string> = {
-            IST: "GMT+0530",
-            GMT: "GMT+0000",
-            UTC: "GMT+0000",
-            CET: "GMT+0100",
-            EDT: "GMT-0400",
-            EST: "GMT-0500",
-            PDT: "GMT-0700",
-            PST: "GMT-0800",
-          };
-
-          d = new Date(
-            s.replace(/\b([A-Z]{2,4})\b/g, (m) => (tzMap[m] ? tzMap[m] : m))
-          );
-          if (!isNaN(d.getTime())) return d;
-
-          const re =
-            /^(?:[A-Za-z]{3}\s)?([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(?:[A-Za-z]{2,4}\s)?(\d{4})$/;
-          const match = s.match(re);
-
-          if (match) {
-            const [, monStr, day, hr, min, sec, year] = match;
-            const months: Record<string, number> = {
-              Jan: 0,
-              Feb: 1,
-              Mar: 2,
-              Apr: 3,
-              May: 4,
-              Jun: 5,
-              Jul: 6,
-              Aug: 7,
-              Sep: 8,
-              Oct: 9,
-              Nov: 10,
-              Dec: 11,
-            };
-
-            const monthIndex = months[monStr];
-            if (monthIndex !== undefined) {
-              return new Date(
-                Number(year),
-                monthIndex,
-                Number(day),
-                Number(hr),
-                Number(min),
-                Number(sec)
-              );
-            }
-          }
-
-          return new Date(NaN);
+          const tzMap: Record<string, string> = { IST: "GMT+0530", GMT: "GMT+0000", UTC: "GMT+0000" };
+          const cleanStr = s.replace(/\b([A-Z]{2,4})\b/g, (m) => (tzMap[m] ? tzMap[m] : m));
+          d = new Date(cleanStr);
+          return !isNaN(d.getTime()) ? d : new Date(NaN);
         };
 
         const dateObj = parseDateFlexible(dateStr);
 
         if (isNaN(dateObj.getTime())) {
-          return (
-            <Badge variant="outline" className="text-muted-foreground px-1.5">
-              {dateStr}
-            </Badge>
-          );
+          return <span className="text-xs text-zinc-500">{dateStr}</span>;
         }
-
-        const time = dateObj.toLocaleTimeString("en-IN", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        });
-
-        const date = dateObj.toLocaleDateString("en-IN", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        });
 
         const today = new Date();
         const isToday =
@@ -322,12 +201,20 @@ export function DataTable({
           dateObj.getMonth() === today.getMonth() &&
           dateObj.getFullYear() === today.getFullYear();
 
-        const displayValue = isToday ? time : `${date} ${time}`;
+        let displayValue = "";
+        if (isToday) {
+          displayValue = dateObj.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
+        } else {
+          displayValue = dateObj.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+          if (dateObj.getFullYear() !== today.getFullYear()) {
+            displayValue += `, ${dateObj.getFullYear()}`;
+          }
+        }
 
         return (
-          <Badge variant="outline" className="text-muted-foreground px-1.5">
+          <span className={`text-xs tabular-nums whitespace-nowrap ${isUnread ? "font-bold text-blue-400" : "font-medium text-zinc-500"}`}>
             {displayValue}
-          </Badge>
+          </span>
         );
       },
     },
@@ -336,35 +223,25 @@ export function DataTable({
       cell: () => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-              size="icon"
-            >
-              <IconDotsVertical />
+            <Button variant="ghost" className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800">
+              <IconDotsVertical className="size-4" />
               <span className="sr-only">Open menu</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem>Edit</DropdownMenuItem>
-            <DropdownMenuItem>Make a copy</DropdownMenuItem>
-            <DropdownMenuItem>Favorite</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-40 border-zinc-800 bg-zinc-950 text-zinc-400">
+            <DropdownMenuItem className="hover:bg-zinc-900 hover:text-zinc-100 cursor-pointer">Reply</DropdownMenuItem>
+            <DropdownMenuItem className="hover:bg-zinc-900 hover:text-zinc-100 cursor-pointer">Mark as read</DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-zinc-800" />
+            <DropdownMenuItem className="text-red-500 hover:bg-red-950/20 hover:text-red-400 cursor-pointer">Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ),
+      size: 40,
     },
   ]
 
-
-  const dataIds = React.useMemo<UniqueIdentifier[]>(
-    () => data?.map(({ uid }) => uid) || [],
-    [data]
-  )
-
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: {
       sorting,
@@ -388,239 +265,142 @@ export function DataTable({
     getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (active && over && active.id !== over.id) {
-      setData((data) => {
-        const oldIndex = dataIds.indexOf(active.id)
-        const newIndex = dataIds.indexOf(over.id)
-        return arrayMove(data, oldIndex, newIndex)
-      })
-    }
-  }
-
   return (
-    <Tabs
-      defaultValue="outline"
-      className="w-full flex-col justify-start gap-6"
-    >
-      <div className="flex items-center justify-between px-4 lg:px-6">
-        <Label htmlFor="view-selector" className="sr-only">
-          View
-        </Label>
-        <Select defaultValue="outline">
-          <SelectTrigger
-            className="flex w-fit @4xl/main:hidden"
-            size="sm"
-            id="view-selector"
-          >
-            <SelectValue placeholder="Select a view" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="outline">Outline</SelectItem>
-            <SelectItem value="past-performance">Past Performance</SelectItem>
-            <SelectItem value="key-personnel">Key Personnel</SelectItem>
-            <SelectItem value="focus-documents">Focus Documents</SelectItem>
-          </SelectContent>
-        </Select>
-        <TabsList className="**:data-[slot=badge]:bg-muted-foreground/30 hidden **:data-[slot=badge]:size-5 **:data-[slot=badge]:rounded-full **:data-[slot=badge]:px-1 @4xl/main:flex">
-          <TabsTrigger value="outline">Outline</TabsTrigger>
-          <TabsTrigger value="past-performance">
-            Past Performance <Badge variant="secondary">3</Badge>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
+        <TabsList className="bg-zinc-900/50 border border-zinc-800 p-1 h-9">
+
+          <TabsTrigger value="all" className="data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 text-zinc-400 text-xs px-3 h-7">
+            All Mail
           </TabsTrigger>
-          <TabsTrigger value="key-personnel">
-            Key Personnel <Badge variant="secondary">2</Badge>
+
+          <TabsTrigger value="unread" className="data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 text-zinc-400 text-xs px-3 h-7">
+            Unread
+            {unreadCount > 0 && (
+              <Badge className="ml-2 h-4 rounded-sm bg-indigo-500/20 text-[10px] text-indigo-300 hover:bg-indigo-500/30 border-0 px-1">
+                {unreadCount}
+              </Badge>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="focus-documents">Focus Documents</TabsTrigger>
+
+          <TabsTrigger value="flagged" className="data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100 text-zinc-400 text-xs px-3 h-7">
+            Flagged
+          </TabsTrigger>
         </TabsList>
+
         <div className="flex items-center gap-2">
+          <div className="relative hidden md:block">
+            <IconSearch className="absolute left-2.5 top-2 size-3.5 text-zinc-500" />
+            <Input
+              placeholder="Filter messages..."
+              className="h-8 w-[200px] pl-8 bg-zinc-900/50 border-zinc-800 text-xs text-zinc-300 focus-visible:ring-indigo-500/50"
+            />
+          </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <IconLayoutColumns />
-                <span className="hidden lg:inline">Customize Columns</span>
-                <span className="lg:hidden">Columns</span>
-                <IconChevronDown />
+              <Button variant="outline" size="sm" className="h-8 border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800">
+                <IconLayoutColumns className="size-3.5 mr-2" />
+                Columns
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              {table
-                .getAllColumns()
-                .filter(
-                  (column) =>
-                    typeof column.accessorFn !== "undefined" &&
-                    column.getCanHide()
-                )
-                .map((column) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value) =>
-                        column.toggleVisibility(!!value)
-                      }
-                    >
-                      {column.id}
-                    </DropdownMenuCheckboxItem>
-                  )
-                })}
+            <DropdownMenuContent align="end" className="bg-zinc-950 border-zinc-800">
+              {table.getAllColumns().filter((c) => c.getCanHide()).map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  className="capitalize text-zinc-400 focus:text-zinc-100 focus:bg-zinc-900"
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                >
+                  {column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm">
-            <IconPlus />
-            <span className="hidden lg:inline">Add Section</span>
-          </Button>
         </div>
       </div>
-      <TabsContent
-        value="outline"
-        className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
-      >
-        <div className="overflow-hidden rounded-lg border">
-          <DndContext
-            collisionDetection={closestCenter}
-            modifiers={[restrictToVerticalAxis]}
-            onDragEnd={handleDragEnd}
-            sensors={sensors}
-            id={sortableId}
-          >
-            <Table>
-              <TableHeader className="bg-muted sticky top-0 z-10">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      return (
-                        <TableHead key={header.id} colSpan={header.colSpan}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                        </TableHead>
-                      )
-                    })}
-                  </TableRow>
+
+      <div className="relative overflow-hidden m-0 p-0">
+        <Table className="w-full">
+          <TableHeader className="bg-zinc-900/30 backdrop-blur-sm sticky top-0 z-20">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id} className="border-b border-zinc-800 hover:bg-transparent">
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id} colSpan={header.colSpan} style={{ width: header.getSize() }} className="text-zinc-500 h-10 text-xs uppercase tracking-wider font-medium">
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
                 ))}
-              </TableHeader>
-              <TableBody className="**:data-[slot=table-cell]:first:w-8">
-                {table.getRowModel().rows?.length ? (
-                  <SortableContext
-                    items={dataIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {table.getRowModel().rows.map((row) => (
-                      <DraggableRow key={row.id} row={row} />
-                    ))}
-                  </SortableContext>
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No results.
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  className={`
+                        group border-b border-zinc-800/50 transition-colors
+                        ${!row.original.isRead ? "bg-zinc-900/30 hover:bg-zinc-900/80" : "hover:bg-zinc-900/40"}
+                    `}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className="py-3">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </DndContext>
-        </div>
-        <div className="flex items-center justify-between px-4">
-          <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
-            {table.getFilteredSelectedRowModel().rows.length} of{" "}
-            {table.getFilteredRowModel().rows.length} row(s) selected.
-          </div>
-          <div className="flex w-full items-center gap-8 lg:w-fit">
-            <div className="hidden items-center gap-2 lg:flex">
-              <Label htmlFor="rows-per-page" className="text-sm font-medium">
-                Rows per page
-              </Label>
-              <Select
-                value={`${table.getState().pagination.pageSize}`}
-                onValueChange={(value) => {
-                  table.setPageSize(Number(value))
-                }}
-              >
-                <SelectTrigger size="sm" className="w-20" id="rows-per-page">
-                  <SelectValue
-                    placeholder={table.getState().pagination.pageSize}
-                  />
-                </SelectTrigger>
-                <SelectContent side="top">
-                  {[10, 20, 30, 40, 50].map((pageSize) => (
-                    <SelectItem key={pageSize} value={`${pageSize}`}>
-                      {pageSize}
-                    </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-32 text-center text-zinc-500">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <IconMailOpened className="size-6 text-zinc-700" />
+                    <p>
+                      {activeTab === 'unread' ? "You're all caught up!" : "No emails found."}
+                    </p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {table.getRowModel().rows?.length > 0 && (
+        <div className="flex items-center justify-between border-t border-zinc-800/50 px-4 py-3 bg-zinc-900/10">
+          <div className="text-xs text-zinc-500">
+            {table.getFilteredSelectedRowModel().rows.length} selected
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-500">Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</span>
             </div>
-            <div className="flex w-fit items-center justify-center text-sm font-medium">
-              Page {table.getState().pagination.pageIndex + 1} of{" "}
-              {table.getPageCount()}
-            </div>
-            <div className="ml-auto flex items-center gap-2 lg:ml-0">
+            <div className="flex items-center gap-1">
               <Button
                 variant="outline"
-                className="hidden h-8 w-8 p-0 lg:flex"
-                onClick={() => table.setPageIndex(0)}
-                disabled={!table.getCanPreviousPage()}
-              >
-                <span className="sr-only">Go to first page</span>
-                <IconChevronsLeft />
-              </Button>
-              <Button
-                variant="outline"
-                className="size-8"
-                size="icon"
+                className="h-7 w-7 p-0 border-zinc-800 bg-transparent text-zinc-400 hover:bg-zinc-800 hover:text-white"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
               >
-                <span className="sr-only">Go to previous page</span>
-                <IconChevronLeft />
+                <IconChevronLeft className="size-4" />
               </Button>
               <Button
                 variant="outline"
-                className="size-8"
-                size="icon"
+                className="h-7 w-7 p-0 border-zinc-800 bg-transparent text-zinc-400 hover:bg-zinc-800 hover:text-white"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
               >
-                <span className="sr-only">Go to next page</span>
-                <IconChevronRight />
-              </Button>
-              <Button
-                variant="outline"
-                className="hidden size-8 lg:flex"
-                size="icon"
-                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                disabled={!table.getCanNextPage()}
-              >
-                <span className="sr-only">Go to last page</span>
-                <IconChevronsRight />
+                <IconChevronRight className="size-4" />
               </Button>
             </div>
           </div>
         </div>
-      </TabsContent>
-      <TabsContent
-        value="past-performance"
-        className="flex flex-col px-4 lg:px-6"
-      >
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
-      <TabsContent value="key-personnel" className="flex flex-col px-4 lg:px-6">
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
-      <TabsContent
-        value="focus-documents"
-        className="flex flex-col px-4 lg:px-6"
-      >
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
+      )}
     </Tabs>
   )
 }

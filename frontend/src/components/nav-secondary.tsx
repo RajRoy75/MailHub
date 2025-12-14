@@ -10,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { ThemeToggle } from "./theme-toggle"
 
 export function NavSecondary({
   items,
@@ -36,6 +37,9 @@ export function NavSecondary({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+        <div className="mt-2 pt-2 border-t border-zinc-800/50">
+          <ThemeToggle />
+        </div>
       </SidebarGroupContent>
     </SidebarGroup>
   )

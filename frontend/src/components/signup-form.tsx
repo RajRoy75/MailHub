@@ -14,6 +14,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { BACKEND_URL } from "@/lib/utils"
 import React, { useState } from "react"
 
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
@@ -31,7 +32,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     setLoading(true)
 
     try {
-      const res = await fetch("http://localhost:8080/auth/signup", {
+      const res = await fetch(`${BACKEND_URL}/auth/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

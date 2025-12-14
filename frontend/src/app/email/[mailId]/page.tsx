@@ -4,27 +4,41 @@ import { use } from "react";
 import { useEffect, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Spinner } from "@/components/ui/spinner";
+import { useImap } from "@/context/imap-context";
+import { BACKEND_URL } from "@/lib/utils";
 
 interface EmailDto {
   subject: string;
   bodyHtml?: string;
 }
 
-export default function EmailPage({ params }: { params: Promise<{ mailId: string }> }) {
+interface EmailPageProps {
+  params: Promise<{ mailId: string }>,
+  searchParams: Promise<{ folder?: string }>
+}
+
+export default function EmailPage({ params, searchParams }: EmailPageProps) {
   const { mailId } = use(params);
+  const { folder } = use(searchParams);
   const [email, setEmail] = useState<EmailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { activeAccount, isLoading } = useImap();
 
   useEffect(() => {
+    if (!activeAccount) return;
     const fetchEmail = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`http://localhost:8080/api/emails/${mailId}`, {
+        // const token = localStorage.getItem("token");
+        const res = await fetch(`${BACKEND_URL}/api/emails/${mailId}?folder=${folder}`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
+            // "Authorization": `Bearer ${token}`,
+            "X-Email": `${activeAccount.email}`,
+            "X-Password": `${activeAccount.password}`
+
           },
+          credentials: "include",
           cache: "no-store",
         });
 

@@ -58,6 +58,7 @@ backend/.gradle/
 backend/build/
 backend/out/
 backend/.env*
+backend/docker-compose.yml
 
 # Ignore test coverage reports
 backend/coverage/

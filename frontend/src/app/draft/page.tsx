@@ -1,12 +1,10 @@
 import EmailList from "@/components/email-list";
 
-
-
-export default function Inbox() {
-
+export default function Draft() {
   return (
     <>
-      <EmailList folder={"inbox"} />
+      <EmailList folder="draft" />
     </>
   )
+
 }

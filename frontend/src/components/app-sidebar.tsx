@@ -2,24 +2,18 @@
 
 import * as React from "react"
 import {
-  IconCamera,
-  IconChartBar,
-  IconDashboard,
-  IconDatabase,
-  IconFileAi,
-  IconFileDescription,
-  IconFileWord,
-  IconFolder,
   IconHelp,
-  IconInnerShadowTop,
-  IconListDetails,
-  IconReport,
   IconSearch,
   IconSettings,
-  IconUsers,
+  IconMail,
+  IconInbox,
+  IconSend,
+  IconTrash,
+  IconAlertTriangle,
+  IconNote,
+  IconSparkles
 } from "@tabler/icons-react"
 
-import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
@@ -32,86 +26,35 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { BACKEND_URL } from "@/lib/utils"
 
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+    id: 1,
+    username: "Guest",
+    email: "loading...",
   },
   navMain: [
     {
-      title: "Dashboard",
-      url: "#",
-      icon: IconDashboard,
+      title: "Inbox",
+      url: "/inbox",
+      icon: IconInbox,
+      isActive: true, // Added to show active state styling
     },
     {
-      title: "Lifecycle",
-      url: "#",
-      icon: IconListDetails,
+      title: "Sent",
+      url: "/sent",
+      icon: IconSend,
     },
     {
-      title: "Analytics",
-      url: "#",
-      icon: IconChartBar,
+      title: "Spam",
+      url: "/spam",
+      icon: IconAlertTriangle,
     },
     {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-    },
-    {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-    },
-  ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: IconCamera,
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Proposal",
-      icon: IconFileDescription,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: IconFileAi,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
+      title: "Drafts",
+      url: "/draft",
+      icon: IconNote,
     },
   ],
   navSecondary: [
@@ -121,62 +64,91 @@ const data = {
       icon: IconSettings,
     },
     {
+      title: "Ask AI", // Renamed for modern feel
+      url: "#",
+      icon: IconSparkles,
+    },
+    {
       title: "Get Help",
       url: "#",
       icon: IconHelp,
     },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-    },
-  ],
-  documents: [
-    {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
-    },
-    {
-      name: "Reports",
-      url: "#",
-      icon: IconReport,
-    },
-    {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
-    },
   ],
 }
 
+interface UserDto {
+  id: Number,
+  username: string,
+  email: string
+  avatar?: string
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [user, setUser] = React.useState<UserDto>(data.user);
+
+  React.useEffect(() => {
+    const getUser = async () => {
+      const userId = localStorage.getItem("userId");
+      if (!userId) return;
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/auth/user/${userId}`, {
+          method: "GET"
+        })
+
+        if (!res.ok) {
+          console.error(`Failed to fetch email (status ${res.status})`);
+          return;
+        }
+        const fetchedData = await res.json();
+        setUser(fetchedData);
+      } catch (e) {
+        console.error("Error fetching user", e);
+      }
+    }
+    getUser();
+  }, [])
+
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
+    <Sidebar
+      collapsible="offcanvas"
+      className="border-r border-zinc-800 bg-zinc-950 text-zinc-400"
+      {...props}
+    >
+      <SidebarHeader className="pb-4 pt-5">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
+              size="lg"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:bg-zinc-900 hover:text-zinc-100 transition-all duration-300 group"
             >
-              <a href="#">
-                <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Acme Inc.</span>
-              </a>
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/20 transition-transform group-hover:scale-105">
+                <IconMail className="size-4" />
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-bold text-zinc-100 tracking-tight">Mailhub</span>
+                <span className="truncate text-xs text-indigo-400 font-medium">Pro Workspace</span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+
+      <SidebarContent className="px-2">
         <NavMain items={data.navMain} />
-        <NavDocuments items={data.documents} />
+
+        <div className="mt-6 mb-2 px-4 text-xs font-semibold text-zinc-600 uppercase tracking-wider">
+          Tools
+        </div>
+
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={data.user} />
+
+      <SidebarFooter className="pb-4">
+        <div className="rounded-xl bg-zinc-900/50 border border-zinc-800/50 p-1">
+          <NavUser user={user} />
+        </div>
       </SidebarFooter>
     </Sidebar>
   )
 }
-

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { BACKEND_URL, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,16 +28,17 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); // ✅ prevent page reload
+    e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8080/auth/login", {
+      const res = await fetch(`${BACKEND_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 
@@ -46,14 +47,10 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
         throw new Error(errText || "Login failed");
       }
 
-      const data = await res.json(); // ✅ await this
+      const data = await res.json();
+      localStorage.setItem("userId", data.id);
       console.log("Login success:", data);
 
-      // ✅ Store JWT securely in localStorage
-      localStorage.setItem("token", data.jwt);
-      localStorage.setItem("userId", data.id);
-
-      // ✅ Redirect to home
       router.push("/");
 
     } catch (err: any) {

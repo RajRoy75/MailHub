@@ -11,8 +11,9 @@ export default function LayoutClient({
 }) {
   const pathname = usePathname();
   const isAuthPage = pathname.startsWith("/auth");
+  const isHomePage = pathname == "/";
 
-  if (isAuthPage) {
+  if (isAuthPage || isHomePage) {
     return <main>{children}</main>;
   }
 
