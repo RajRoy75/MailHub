@@ -2,6 +2,7 @@ package com.rajroy.mailhub.config;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -31,6 +32,9 @@ public class WebSecurityConfig {
   private final JwtAuthFilter jwtAuthFilter;
   private final LogoutHandler logoutHandler;
 
+  @Value("${frontend.url}")
+  private String frontendUrl;
+
   @Bean
   public PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder();
@@ -44,7 +48,7 @@ public class WebSecurityConfig {
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
-    config.setAllowedOrigins(List.of("http://localhost:3000"));
+    config.setAllowedOrigins(List.of(frontendUrl));
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Email", "X-Password"));
     config.setAllowCredentials(true);
